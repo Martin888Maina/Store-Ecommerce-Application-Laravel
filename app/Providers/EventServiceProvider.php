@@ -7,7 +7,6 @@ use Illuminate\Auth\Listeners\SendEmailVerificationNotification;
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
 //  login process
 use App\Events\UserLoggedIn;
-use App\Listeners\EmailVerificationCartTransfer;
 use App\Listeners\TransferGuestCart;
 
 use Illuminate\Auth\Events\Login;
@@ -24,7 +23,6 @@ class EventServiceProvider extends ServiceProvider
      */
     protected $listen = [
         UserLoggedIn::class => [
-            EmailVerificationCartTransfer::class, //email verification
             TransferGuestCart::class, //normal login and password reset
         ],
         Registered::class => [

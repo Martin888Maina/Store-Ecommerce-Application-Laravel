@@ -16,11 +16,6 @@ class TransferGuestCart
      */
     public function handle(UserLoggedIn $event)
     {
-        // Only handle standard logins, logins that are not from the email verification process
-        if ($event->type !== 'standard') {
-            Log::info('Skipped cart transfer for non-standard login type', ['user_id' => $event->user->id, 'type' => $event->type]);
-            return;
-        }
 
         //find the user attached to the event
         $user = $event->user;
@@ -77,8 +72,10 @@ class TransferGuestCart
                     ]);
                 }
             }
+            //logging output in the laravel.log file
             Log::info('Session Cart Transferred', ['user_id' => $user->id]);
         } else {
+            //logging output in the laravel.log file
             Log::warning('No Session Cart Found for Transfer', ['user_id' => $user->id]);
         }
 

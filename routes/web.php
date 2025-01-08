@@ -82,21 +82,26 @@ Route::post('reset-password', [AuthController::class, 'reset'])->name('password.
 
 
 //Email Verification Routes
-//shows a notice to the user to verify their email
+//Routes displays the email verification notice page
 Route::get('/email/verify', function () {
-    return view('auth.notice'); // Replace with your verification view
+    return view('auth.notice'); //auth.notice is path to the blade file
 })->name('verification.notice');
-//handles the actual verification process
-Route::get('/email/verify/{id}/{hash}', [AuthController::class, 'verifyEmail'])
-    ->middleware(['auth', 'signed'])
+
+// Route that handles the actual verification process
+// This route is mapped to the verifyEmail method in the AuthController and is responsible for verifying the user's email when they visit the link sent to their inbox. 
+Route::get('/verify-email/{id}/{hash}', [AuthController::class, 'showVerification'])
+    ->name('verify.email');
+
+// Handle the actual verification
+Route::get('/email/verify/{id}', [AuthController::class, 'verifyEmail'])
+    ->middleware(['signed'])
     ->name('verification.verify');
+
+    //Route too handle the actual email verification notificaton if it sent again
 Route::post('/email/verification-notification', function (Request $request) {
     $request->user()->sendEmailVerificationNotification();
     return back()->with('status', 'Verification link sent!');
 })->middleware(['auth', 'throttle:6,1'])->name('verification.send');
-
-//throttle limits the number of times a route can be accessed
-//6 requests in 1 minute
 
 
 

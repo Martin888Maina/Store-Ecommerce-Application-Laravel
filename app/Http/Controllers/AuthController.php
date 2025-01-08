@@ -26,6 +26,10 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 //imports the PasswordReset event class 
 use Illuminate\Auth\Events\PasswordReset;
+//imports the email verification  class - it is triggered when a user has successfully verified their email
+use Illuminate\Auth\Events\Verified;
+//imports the url facade that generates signed URLS  for email verification
+use Illuminate\Support\Facades\URL;
 
 
 class AuthController extends Controller
@@ -41,7 +45,7 @@ class AuthController extends Controller
     /**
      * Handle the registration process.
      */
-   
+
     public function register(Request $request)
     {
         //validating the user input
@@ -166,7 +170,6 @@ class AuthController extends Controller
         // Return the user to the previous page with an error if login fails
         return back()->withErrors(['email' => 'Invalid email or password.']);
     }
-
 
     /**
      * Logout the user.
@@ -413,39 +416,88 @@ class AuthController extends Controller
     /**
      * Handle the email verification process.
      */
-   
-    public function verifyEmail(EmailVerificationRequest $request)
+    public function verifyEmail(Request $request, $id)
     {
+        //find the user by id
+        $user = User::findOrFail($id);
 
-        //get the logged in user
-        $user = $request->user();
-        Log::info('Email verification initiated for user: ' . $user->id);
+        //logging output in the laravel.log file
+        Log::info('Starting email verification process', [
+            'user_id' => $user->id,
+            'user_name' => $user->name,
+            'user_email' => $user->email,
+            'verification_status' => $user->hasVerifiedEmail() ? 'already verified' : 'pending verification'
+        ]);
 
-        //chccks if users email is verified
-        if (!$user->hasVerifiedEmail()) {
-            $user->markEmailAsVerified();
-            
-            // Restore cart data from the user model to the session
-            $currentCart = json_decode($user->store_data, true);
-            if ($currentCart) {
-                //store the cart data in the session
-                session(['cart' => $currentCart]); 
-                Log::info('Cart data stored before verification for user: ' . $user->id);
+        try {
+            // Verify that the URL is a valid signed URL
+            if (!URL::hasValidSignature($request)) {
+                //logging the user_id and request_url
+                Log::error('Invalid signature for verification URL', [
+                    'user_id' => $user->id,
+                    'request_url' => $request->fullUrl()
+                ]);
+                //redirects the user to login page if verification link fails
+                return redirect()->route('login')
+                    ->with('error', 'Invalid verification link.');
             }
 
-            // Force logout to ensure clean session state
-            Auth::logout();
-            
-            //redirec the user to the login page
-            return redirect()->route('login')
-                ->with('verified', true) // flag to indicate verification was successful
-                ->with('status', 'Your email has been verified! Please login to access your account.');
-        }
+            //checks if the user's email has been verified
+            if (!$user->hasVerifiedEmail()) {
+                //marks the user as verified
+                $user->markEmailAsVerified();
+                // triggers the verified event that confirms that the user emails is verified. It is a aravel inbuilt mechanism
+                event(new Verified($user));
+                
+                // Restore cart data by decoding the session data
+                $currentCart = json_decode($user->store_data, true);
+                // if the cart exists the restore the cart data
+                if ($currentCart) {
+                    session(['cart' => $currentCart]);
+                    Log::info('Cart data restored for user', [
+                        'user_id' => $user->id,
+                        'cart_items_count' => is_array($currentCart) ? count($currentCart) : 0
+                    ]);
+                }
 
-        // if theemail is verified then redirect to the login page
-        return redirect()->route('login')
-            ->with('status', 'Email already verified. Please login to continue.');
-    }
+                //logging output in the laravel.log file
+                Log::info('Email verification completed successfully', [
+                    'user_id' => $user->id,
+                    'user_name' => $user->name,
+                    'verification_timestamp' => now()->toDateTimeString()
+                ]);
+
+                //redirects the user to the login page after successful email verification
+                return redirect()->route('login')
+                    ->with('verified', true)
+                    ->with('status', 'Your email has been verified! Please login to access your account.');
+            }
+
+            //logging output in the laravel.log file
+            Log::info('Email already verified for user', [
+                'user_id' => $user->id,
+                'user_name' => $user->name,
+                'original_verification_date' => $user->email_verified_at
+            ]);
+
+            //redirects the user to the login page
+            return redirect()->route('login')
+                ->with('status', 'Email already verified. Please login to continue.');
+
+        } catch (\Exception $e) {
+            //logging error message in the laravel.log file
+            Log::error('Verification failed', [
+                'user_id' => $user->id,
+                'user_name' => $user->name,
+                'error_message' => $e->getMessage(),
+                'error_trace' => $e->getTraceAsString()
+            ]);
+
+            //redirects the user to the login page
+            return redirect()->route('login')
+                ->with('error', 'There was a problem verifying your email. Please try again.');
+        }
+    }  
 
 }
 
